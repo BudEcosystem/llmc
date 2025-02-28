@@ -9,12 +9,14 @@ from datasets import load_dataset, load_from_disk
 from human_eval.data import read_problems
 from loguru import logger
 
+from llmc.utils.utils import get_device_type
 
 class BaseEval:
     def __init__(self, model, config):
         self.model = model
         self.config = config
         self.tokenizer = self.model.get_tokenizer()
+        self.device = get_device_type()
         # eval_cfg
         self.eval_cfg = config.eval
         self.model_type = config.model.type
@@ -192,13 +194,15 @@ class BaseEval:
             handles = self.register_hooks(model_llmc)
         else:
             if model_llmc.mm_model:
-                model_llmc.mm_model.cuda()
+                model_llmc.mm_model.to(self.device)
             else:
-                model_llmc.model.cuda()
+                model_llmc.model.to(self.device)
 
         if model_llmc.mm_model:
+            model_llmc.mm_model.to(self.device)
             model_llmc.mm_model.eval()
         else:
+            model_llmc.model.to(self.device)
             model_llmc.model.eval()
 
         eval_res = self.eval_func(

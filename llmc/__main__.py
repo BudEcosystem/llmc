@@ -174,14 +174,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, required=True)
     parser.add_argument('--task_id', type=str, required=True)
+    parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'rocm'])
     args = parser.parse_args()
 
     with open(args.config, 'r') as file:
         config = yaml.safe_load(file)
     config = EasyDict(config)
 
-    init_process_group(backend='nccl')
-    torch.cuda.set_device(int(os.environ['LOCAL_RANK']))
+    init_process_group(backend='nccl' if args.device != 'cpu' else 'gloo')
+    if torch.cuda.is_available():
+        torch.cuda.set_device(int(os.environ['LOCAL_RANK']))
 
     if int(os.environ['RANK']) != 0:
         logger.remove()

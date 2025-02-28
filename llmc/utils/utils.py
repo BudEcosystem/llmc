@@ -95,3 +95,9 @@ def get_modality(config):
 def deploy_all_modality(blockwise_opts, quant_format):
     for blockwise_opt in blockwise_opts:
         blockwise_opt.deploy(quant_format)
+
+def get_device_type():
+    if torch.cuda.is_available():
+        return 'cuda'
+    else:
+        return 'cpu'

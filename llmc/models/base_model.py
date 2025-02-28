@@ -16,11 +16,12 @@ from llmc.compression.quantization.module_utils import (
 from llmc.compression.quantization.utils import (check_do_quant, check_w_only,
                                                  get_aquantizer,
                                                  get_wquantizer)
-
+from llmc.utils.utils import get_device_type
 
 class BaseModel(metaclass=ABCMeta):
     def __init__(self, config, device_map=None, use_cache=False):
         self.config = config
+        self.device = get_device_type()
         self.model_type = self.config.model.type
         self.model_path = self.config.model.path
         self.tokenizer_mode = self.config.model.get('tokenizer_mode', 'fast')
@@ -407,9 +408,11 @@ class BaseModel(metaclass=ABCMeta):
             if keep_device:
                 self.replace_module_block(module, block, block_idx, params_dict)
             else:
-                block = block.cuda()
+                if self.device == 'cuda':   
+                    block = block.cuda()
                 self.replace_module_block(module, block, block_idx, params_dict)
-                block = block.cpu()
+                if self.device == 'cuda':
+                    block = block.cpu()
 
         gc.collect()
         torch.cuda.empty_cache()

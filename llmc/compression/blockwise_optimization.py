@@ -4,6 +4,7 @@ from abc import ABCMeta, abstractmethod
 import torch
 from loguru import logger
 
+from llmc.utils.utils import get_device_type
 
 class BlockwiseOpt(metaclass=ABCMeta):
     def __init__(self, model, compress_config, input, padding_mask, config):
@@ -17,6 +18,7 @@ class BlockwiseOpt(metaclass=ABCMeta):
         self.config = config
         self.block_idx = None
         self.num_blocks = len(self.blocks)
+        self.device = get_device_type()
         if self.input:
             for i in range(len(input['kwargs'])):
                 if 'use_cache' in input['kwargs'][i]:

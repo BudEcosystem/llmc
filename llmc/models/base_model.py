@@ -224,7 +224,7 @@ class BaseModel(metaclass=ABCMeta):
 
         Catcher = self.get_catcher(first_block_input)
 
-        if not self.use_cpu_to_save_cuda_mem_for_catcher:
+        if not self.use_cpu_to_save_cuda_mem_for_catcher and self.device == 'cuda':
             self.move_embed_to_device('cuda')
             if self.vision_model:
                 self.vision_model.cuda()
@@ -239,7 +239,7 @@ class BaseModel(metaclass=ABCMeta):
 
         for data in calib_data:
             data = {
-                k: (v.cuda() if torch.is_tensor(v) else v)
+                k: (v.to(self.device) if torch.is_tensor(v) else v)
                 for k, v in data.items()
             }
             try:
@@ -264,7 +264,7 @@ class BaseModel(metaclass=ABCMeta):
                         value=1
                     )
         self.padding_mask = padding_mask
-        if not self.use_cpu_to_save_cuda_mem_for_catcher:
+        if not self.use_cpu_to_save_cuda_mem_for_catcher and self.device == 'cuda':
             if self.vision_model:
                 self.vision_model.cpu()
             if self.vision_projector:

@@ -5,6 +5,7 @@ import torch
 import torch.distributed as dist
 from loguru import logger
 
+from llmc.utils.utils import get_device_type
 from .module_utils import _LLMC_LINEAR_TYPES_, _TRANSFORMERS_LINEAR_TYPES_
 from .utils import check_do_quant, check_w_only, get_aquantizer, get_wquantizer
 
@@ -33,6 +34,7 @@ class AutoClipper:
         self.weight_clips = {}
         self.w_only = w_only
         self.logit = lambda x: torch.log(x / (1 - x))
+        self.device = get_device_type()
 
     @torch.no_grad()
     def run(self, block, block_idx, input_feat, n_sample_token):
@@ -46,7 +48,7 @@ class AutoClipper:
                 )
                 continue
             if isinstance(m, tuple(_LLMC_LINEAR_TYPES_ + _TRANSFORMERS_LINEAR_TYPES_)):
-                m = m.cuda()
+                m = m.to(self.device)
                 if any([_ in n for _ in ['q_', 'k_', 'query', 'key', 'Wqkv']]):
                     if self.clip_version == 'v2':
                         m.register_buffer('buf_upbound_factor', None)

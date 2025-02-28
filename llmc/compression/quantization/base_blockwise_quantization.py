@@ -433,7 +433,7 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
         if self.quant_kvcache:
             self.register_kv_cache(block)
 
-        block = block.cuda()
+        block = block.to(self.device)
         named_linears = self.model.get_block_linears(block)
         extra_modules = self.model.get_extra_modules(block)
 
@@ -454,7 +454,8 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
 
         self.run(block, input_feat, handles)
 
-        block = block.cpu()
+        if self.device == 'cuda':
+            block = block.to('cpu')
         del input_feat
         gc.collect()
         torch.cuda.empty_cache()

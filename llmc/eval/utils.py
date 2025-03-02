@@ -72,6 +72,7 @@ def get_eval_list(model, config):
 
 
 def eval_model(model, blockwise_opts, eval_list, eval_pos):
+    results = []
     if int(os.environ['RANK']) == 0:
         do_eval = False
         for _, config_for_eval in eval_list:
@@ -88,3 +89,9 @@ def eval_model(model, blockwise_opts, eval_list, eval_pos):
                     eval_name = config_for_eval.eval.type
                     dataset_name = config_for_eval.eval.name
                     logger.info(f'EVAL: {eval_name} on {dataset_name} is {res}')
+                    results.append({
+                        "eval_name": eval_name,
+                        "dataset_name": dataset_name,
+                        "eval_score": res
+                    })
+    return results

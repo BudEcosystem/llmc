@@ -21,10 +21,19 @@ from llmc.utils import (check_config, deploy_all_modality, get_modality,
                         mkdirs, print_important_package_version, seed_all,
                         update_autoawq_quant_config, update_vllm_quant_config)
 from llmc.utils.registry_factory import ALGO_REGISTRY, MODEL_REGISTRY
+from llmc.utils.kube import create_or_update_configmap, QuantizeConfigMap
+from llmc.utils.utils import get_device_type
 
 
-def main(config):
+def update_status(configmap: QuantizeConfigMap, use_kubernetes: bool = False):
+    if use_kubernetes:
+        create_or_update_configmap(configmap)
+    else:
+        print(f"configmap: {configmap.__dict__}")
+
+def main(config, use_kubernetes: bool = False):
     model = MODEL_REGISTRY[config.model.type](config)
+    quantize_configmap = QuantizeConfigMap()
 
     logger.info(f'model: {model}')
     logger.info(f'tokenizer: {model.get_tokenizer()}')
@@ -34,7 +43,12 @@ def main(config):
     for modality, modality_config in zip(modalities, modality_configs):
         model.set_modality(modality)
         eval_list = get_eval_list(model, config)
-        eval_model(model, None, eval_list, eval_pos='pretrain')
+        base_eval = eval_model(model, None, eval_list, eval_pos='pretrain')
+        if len(base_eval):
+            quantize_configmap.base_model_eval = True
+            quantize_configmap.base_model_eval_score = base_eval
+            quantize_configmap.quantization_progress = "inprogress"
+            update_status(quantize_configmap, use_kubernetes=use_kubernetes)
         if not config.get('calib', False):
             blockwise_opt = ALGO_REGISTRY[modality_config.method](
                 model,
@@ -66,7 +80,6 @@ def main(config):
             blockwise_opts.append(blockwise_opt)
             dist.barrier()
 
-    eval_model(model, blockwise_opts, eval_list, eval_pos='transformed')
     if int(os.environ['RANK']) == 0:
         if 'save' in config and config.save.get('save_trans', False):
             blockwise_opt.save_model(save_trans_path)
@@ -81,8 +94,8 @@ def main(config):
                 config.save.get('trtllm_cfg'),
             )
 
-        eval_model(model, blockwise_opts, eval_list, eval_pos='fake_quant')
-        eval_model(model, blockwise_opts, eval_list, eval_pos='fake_quant_wo_kv')
+        # eval_model(model, blockwise_opts, eval_list, eval_pos='fake_quant')
+        # eval_model(model, blockwise_opts, eval_list, eval_pos='fake_quant_wo_kv')
 
         if 'save' in config and config.save.get('save_fake', False):
             deploy_all_modality(blockwise_opts, 'fake_quant')
@@ -152,6 +165,16 @@ def main(config):
             blockwise_opt.save_model(save_quant_path)
             update_autoawq_quant_config(config, save_quant_path)
 
+        quantize_configmap.quantization_progress = "success"
+        update_status(quantize_configmap, use_kubernetes=use_kubernetes)
+
+        quant_eval_result = eval_model(model, blockwise_opts, eval_list, eval_pos='transformed')
+        
+        if len(quant_eval_result):
+            quantize_configmap.quantization_eval = True
+            quantize_configmap.quantization_eval_score.append(quant_eval_result)
+            update_status(quantize_configmap, use_kubernetes=use_kubernetes)
+
         if 'opencompass' in config:
             assert config.save.get('save_trans', False)
             cfg_path = config['opencompass']['cfg_path']
@@ -174,15 +197,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, required=True)
     parser.add_argument('--task_id', type=str, required=True)
-    parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'rocm'])
+    parser.add_argument('--use_kubernetes', action='store_true')
     args = parser.parse_args()
 
     with open(args.config, 'r') as file:
         config = yaml.safe_load(file)
     config = EasyDict(config)
 
-    init_process_group(backend='nccl' if args.device != 'cpu' else 'gloo')
-    if torch.cuda.is_available():
+    device = get_device_type()
+
+    init_process_group(backend='nccl' if device != 'cpu' else 'gloo')
+    if device == 'cuda':
         torch.cuda.set_device(int(os.environ['LOCAL_RANK']))
 
     if int(os.environ['RANK']) != 0:
@@ -246,7 +271,7 @@ if __name__ == '__main__':
     # Synchronize all processes after directory creation
     dist.barrier()
 
-    main(config)
+    main(config, args.use_kubernetes)
 
     destroy_process_group()
 

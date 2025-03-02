@@ -23,25 +23,11 @@ RUN pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/we
 
 RUN pip install packaging ninja opencv-python
 
-# download torch and torchvision wheels into whls filefold
-COPY whls/*.whl /app/
+COPY . /app/
 
-RUN pip install --no-cache-dir torch-*.whl torchvision*.whl
+RUN pip install -v .
+RUN pip install git+https://github.com/Dao-AILab/flash-attention.git
+RUN pip install git+https://github.com/Dao-AILab/fast-hadamard-transform.git
 
-WORKDIR /workspace
-
-# download flash-attention source code
-COPY flash-attention /workspace/flash-attention
-
-RUN cd flash-attention && pip install --no-cache-dir -v -e .
-
-# download fast-hadamard-transform source code
-COPY fast-hadamard-transform /workspace/fast-hadamard-transform
-
-RUN cd fast-hadamard-transform && pip install --no-cache-dir -v -e .
-
-COPY requirements/runtime.txt /app/
-
-RUN pip install --no-cache-dir -r /app/runtime.txt
-
-RUN rm -rf /app
+# RUN rm -rf /app
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]

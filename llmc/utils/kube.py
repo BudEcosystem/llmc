@@ -1,7 +1,10 @@
+import json
 import random
 import time
 import os
 from kubernetes import client, config
+from kubernetes.client.rest import ApiException
+from kubernetes.client import V1ConfigMap
 
 # ConfigMap name
 CONFIGMAP_NAME = "quantization-progress"
@@ -16,30 +19,35 @@ class QuantizeConfigMap:
     quantization_eval_score: list = []
 
 
-def create_or_update_configmap(data: QuantizeConfigMap):
-    """Create or update a Kubernetes ConfigMap with intermediate results."""
+def create_or_update_configmap(data, name=CONFIGMAP_NAME, namespace=NAMESPACE):
     # Load Kubernetes config (inside the cluster)
     config.load_incluster_config()
+
+    # Create ConfigMap object
+    configmap = V1ConfigMap(
+        api_version="v1",
+        kind="ConfigMap",
+        metadata={"name": name},
+        data={k: json.dumps(v) for k, v in data.__dict__.items()}
+    )
 
     # Kubernetes API client
     v1 = client.CoreV1Api()
     try:
         # Check if ConfigMap exists
-        existing = v1.read_namespaced_config_map(CONFIGMAP_NAME, NAMESPACE)
-        
-        # Update existing ConfigMap
-        existing.data.update(data)
-        v1.replace_namespaced_config_map(CONFIGMAP_NAME, NAMESPACE, existing)
-        print("Updated ConfigMap successfully.")
-    
-    except client.exceptions.ApiException as e:
-        if e.status == 404:
-            # Create new ConfigMap if it doesn't exist
-            cm = client.V1ConfigMap(
-                metadata=client.V1ObjectMeta(name=CONFIGMAP_NAME),
-                data=data
-            )
-            v1.create_namespaced_config_map(namespace=NAMESPACE, body=cm)
-            print("Created new ConfigMap.")
-        else:
-            print(f"Error updating ConfigMap: {e}")
+        try:
+            existing = v1.read_namespaced_config_map(name, namespace)
+            # Update existing ConfigMap
+            existing.data.update(configmap.data)
+            v1.replace_namespaced_config_map(name, namespace, existing)
+            print("Updated ConfigMap successfully.")
+        except ApiException as e:
+            if e.status == 404:
+                # Create new ConfigMap if it doesn't exist
+                v1.create_namespaced_config_map(namespace=namespace, body=configmap)
+                print("Created ConfigMap successfully.")
+            else:
+                raise e
+    except ApiException as e:
+        print(f"Exception when handling ConfigMap: {e}")
+        raise e

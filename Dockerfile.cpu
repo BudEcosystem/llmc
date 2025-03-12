@@ -1,0 +1,42 @@
+FROM ubuntu:22.04 AS base
+
+
+ENV CCACHE_DIR=/root/.cache/ccache
+
+ENV CMAKE_CXX_COMPILER_LAUNCHER=ccache
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN --mount=type=cache,target=/var/cache/apt \
+    apt-get update -y \
+    && apt-get install -y curl ccache git wget vim numactl gcc-12 g++-12 python3 python3-pip libtcmalloc-minimal4 libnuma-dev \
+    && apt-get install -y ffmpeg libsm6 libxext6 libgl1 \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 10 --slave /usr/bin/g++ g++ /usr/bin/g++-12
+
+
+# https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/performance_tuning/tuning_guide.html
+# intel-openmp provides additional performance improvement vs. openmp
+# tcmalloc provides better memory allocation efficiency, e.g, holding memory in caches to speed up access of commonly-used objects.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install intel-openmp==2025.0.1
+
+ENV LD_PRELOAD="/usr/lib/x86_64-linux-gnu/libtcmalloc_minimal.so.4:/usr/local/lib/libiomp5.so"
+
+RUN echo 'ulimit -c 0' >> ~/.bashrc
+
+RUN pip install intel_extension_for_pytorch==2.5.0
+
+ARG PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/cpu"
+ENV PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}
+
+RUN pip install packaging ninja opencv-python
+
+FROM base AS build
+
+WORKDIR /app
+
+COPY . /app/
+
+RUN pip install -v .
+
+# RUN rm -rf /app
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]

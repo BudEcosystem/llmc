@@ -23,12 +23,19 @@ def create_or_update_configmap(data, name=CONFIGMAP_NAME, namespace=NAMESPACE):
     # Load Kubernetes config (inside the cluster)
     config.load_incluster_config()
 
+    data_dict = {}
+    for k, v in data.__dict__.items():
+        if isinstance(v, str):
+            data_dict[k] = v
+        else:
+            data_dict[k] = json.dumps(v)
+
     # Create ConfigMap object
     configmap = V1ConfigMap(
         api_version="v1",
         kind="ConfigMap",
         metadata={"name": name},
-        data={k: json.dumps(v) for k, v in data.__dict__.items()}
+        data=data_dict
     )
 
     # Kubernetes API client

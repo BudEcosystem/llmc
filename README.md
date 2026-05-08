@@ -252,11 +252,14 @@ We develop our code referring to the following repos:
 If you find our toolkit or research paper useful or relevant to your research, please kindly cite our work:
 
 ```
-@article{lv2025llmc+,
-  title={LLMC+: Benchmarking Vision-Language Model Compression with a Plug-and-play Toolkit},
+@inproceedings{lv2026llmc+,
+  title={Llmc+: Benchmarking vision-language model compression with a plug-and-play toolkit},
   author={Lv, Chengtao and Zhang, Bilang and Yong, Yang and Gong, Ruihao and Huang, Yushi and Gu, Shiqiao and Wu, Jiajun and Shi, Yumeng and Guo, Jinyang and Wang, Wenya},
-  journal={arXiv preprint arXiv:2508.09981},
-  year={2025}
+  booktitle={Proceedings of the AAAI Conference on Artificial Intelligence},
+  volume={40},
+  number={29},
+  pages={24189--24197},
+  year={2026}
 }
 ```
 

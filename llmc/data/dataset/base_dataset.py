@@ -3,10 +3,11 @@ import os
 from abc import ABCMeta
 
 import torch
-from datasets import load_dataset, load_from_disk
 from loguru import logger
 from PIL import Image
 from torch.nn import functional as F
+
+from datasets import load_dataset, load_from_disk
 
 from .specified_preproc import PREPROC_REGISTRY
 
@@ -172,9 +173,10 @@ class BaseDataset(metaclass=ABCMeta):
         return calib_model_inputs
 
     def get_calib_dataset(self):
-        samples = self.calib_dataset[
-            int(os.environ['RANK'])::int(os.environ['WORLD_SIZE'])
-        ]
+        samples = self.calib_dataset.shard(
+            num_shards=int(os.environ['WORLD_SIZE']),
+            index=int(os.environ['RANK'])
+        )
         logger.info(f'len(samples) rank : {len(samples)}')
 
         calib_model_inputs = self.get_calib_model_inputs(samples)

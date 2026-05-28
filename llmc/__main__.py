@@ -23,18 +23,32 @@ from llmc.utils import (check_config, collect_lightllm_kv_calib_json,
                         print_important_package_version, seed_all,
                         update_autoawq_quant_config,
                         update_lightx2v_quant_config, update_vllm_quant_config)
+from llmc.utils.kube import QuantizeConfigMap, create_or_update_configmap
 from llmc.utils.registry_factory import ALGO_REGISTRY, MODEL_REGISTRY
 from llmc.utils.utils import get_device_type
 
 
-def main(config):
+def update_status(configmap, use_kubernetes=False):
+    if use_kubernetes:
+        create_or_update_configmap(configmap)
+    else:
+        print(f'configmap: {configmap.__dict__}')
+
+
+def main(config, use_kubernetes=False):
     model = MODEL_REGISTRY[config.model.type](config)
+    quantize_configmap = QuantizeConfigMap()
 
     logger.info(f'model: {model}')
     logger.info(f'tokenizer: {model.get_tokenizer()}')
 
     eval_list = get_eval_list(model, config)
-    eval_model(model, None, eval_list, eval_pos='pretrain')
+    base_eval = eval_model(model, None, eval_list, eval_pos='pretrain')
+    if len(base_eval):
+        quantize_configmap.base_model_eval = True
+        quantize_configmap.base_model_eval_score = base_eval
+        quantize_configmap.quantization_progress = 'inprogress'
+        update_status(quantize_configmap, use_kubernetes=use_kubernetes)
 
     blockwise_opts = []
     modalities, modality_configs = get_modality(config)
@@ -72,7 +86,7 @@ def main(config):
             blockwise_opts.append(blockwise_opt)
             dist.barrier()
 
-    eval_model(model, blockwise_opts, eval_list, eval_pos='transformed')
+    quant_eval_result = eval_model(model, blockwise_opts, eval_list, eval_pos='transformed')
     if int(os.environ['RANK']) == 0:
         if 'save' in config and config.save.get('save_lightllm_kv_cache_calib', False):
             calib_json_list = [
@@ -102,8 +116,10 @@ def main(config):
                 config.save.get('trtllm_cfg'),
             )
 
-        eval_model(model, blockwise_opts, eval_list, eval_pos='fake_quant')
-        eval_model(model, blockwise_opts, eval_list, eval_pos='fake_quant_wo_kv')
+        # NOTE(bud-cpu-fork): fake_quant evals disabled to cut CPU eval time;
+        # not required for the bud-runtime quantization-progress contract.
+        # eval_model(model, blockwise_opts, eval_list, eval_pos='fake_quant')
+        # eval_model(model, blockwise_opts, eval_list, eval_pos='fake_quant_wo_kv')
 
         if 'save' in config and config.save.get('save_fake', False):
             deploy_all_modality(blockwise_opts, 'fake_quant')
@@ -178,6 +194,14 @@ def main(config):
                 blockwise_opt.save_model(save_quant_path)
                 update_lightx2v_quant_config(save_quant_path)
 
+        quantize_configmap.quantization_progress = 'success'
+        update_status(quantize_configmap, use_kubernetes=use_kubernetes)
+
+        if len(quant_eval_result):
+            quantize_configmap.quantization_eval = True
+            quantize_configmap.quantization_eval_score.append(quant_eval_result)
+            update_status(quantize_configmap, use_kubernetes=use_kubernetes)
+
         if 'opencompass' in config:
             assert config.save.get('save_trans', False)
             cfg_path = config['opencompass']['cfg_path']
@@ -200,6 +224,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, required=True)
     parser.add_argument('--task_id', type=str, required=True)
+    parser.add_argument('--use_kubernetes', action='store_true')
     args = parser.parse_args()
 
     with open(args.config, 'r') as file:
@@ -285,7 +310,7 @@ if __name__ == '__main__':
     # Synchronize all processes after directory creation
     dist.barrier()
 
-    main(config)
+    main(config, args.use_kubernetes)
 
     destroy_process_group()
 

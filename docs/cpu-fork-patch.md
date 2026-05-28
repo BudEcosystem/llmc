@@ -44,6 +44,36 @@ internally no-ops when CUDA is unavailable.
 `self.device` is inherited where possible: `Awq` and `BaseBlockwiseQuantization`
 get it from `BlockwiseOpt`; `PerplexityEval`/`DecodePerplexityEval` from `BaseEval`.
 
+## Kubernetes / bud-runtime integration (fork-only)
+
+The engine runs as a Kubernetes Job launched by `budcluster`. Progress is
+reported by writing a ConfigMap that `budcluster` polls
+(`services/budcluster/.../playbooks/get_quantization_status.yaml`).
+
+| File | Change |
+|------|--------|
+| `llmc/utils/kube.py` | NEW. `QuantizeConfigMap` + `create_or_update_configmap()` writing the `quantization-progress` ConfigMap |
+| `llmc/__main__.py` | `update_status()` helper; `--use_kubernetes` flag; `main(config, use_kubernetes)`; report base eval (`inprogress`) → `success` after save → `quantization_eval`; `fake_quant` evals disabled (CPU time) |
+| `llmc/eval/utils.py` | `eval_model()` returns `[{eval_name, dataset_name, eval_score}]` |
+| `scripts/entrypoint.sh` | NEW. `torchrun llmc --config $1 ${2:+--use_kubernetes}` |
+| `setup.py` | NEW. `pip install .` |
+| `requirements/runtime.txt` | add `kubernetes` |
+| `Dockerfile.cpu` | NEW. Intel IPEX 2.5.0 CPU image; `ENTRYPOINT entrypoint.sh` |
+
+**Contract — do NOT break (must match `budcluster`):**
+
+- ConfigMap name: `quantization-progress`; Job name: `quantization-job`.
+- ConfigMap data keys: `quantization_progress` (`inprogress`/`success`),
+  `quantization_eval`, `quantization_eval_score`, `base_model_eval`,
+  `base_model_eval_score`.
+- `QuantizeConfigMap` uses **class attributes** on purpose:
+  `create_or_update_configmap` iterates `instance.__dict__`, so a key is only
+  written once assigned. `quantization_eval` must stay absent until the eval
+  step — `budcluster` treats its presence as the terminal "run_evaluation"
+  signal. Do not convert these to `__init__` instance attributes.
+- Entrypoint args: `[<config.yml>, use_kubernetes]`; `NAMESPACE` env supplies
+  the target namespace.
+
 ## How to reapply after an upstream sync
 
 1. `git checkout -b feature/cpu-support-vN origin/main`

@@ -35,3 +35,4 @@ librosa
 human_eval
 imageio
 diffusers
+kubernetes

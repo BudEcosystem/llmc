@@ -25,7 +25,7 @@ class PerplexityEval(BaseEval):
             j = min(i + bs, nsamples)
 
             # Prepare inputs and move to gpu
-            inputs = testenc[:, (i * seq_len): (j * seq_len)].cuda()
+            inputs = testenc[:, (i * seq_len): (j * seq_len)].to(self.device)
             inputs = inputs.reshape(j - i, seq_len)
 
             # Forward pass through the model
@@ -74,7 +74,7 @@ class DecodePerplexityEval(BaseEval):
             pbar = tqdm(range(0, seq_len - 1))
 
             for idx in pbar:
-                input_ids = encodings.input_ids[:, idx:idx + 1].cuda()
+                input_ids = encodings.input_ids[:, idx:idx + 1].to(self.device)
                 with torch.no_grad():
                     outputs = model.model(
                         input_ids,

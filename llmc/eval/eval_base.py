@@ -9,12 +9,15 @@ from datasets import load_dataset, load_from_disk
 from human_eval.data import read_problems
 from loguru import logger
 
+from llmc.utils.utils import get_device_type
+
 
 class BaseEval:
     def __init__(self, model, config):
         self.model = model
         self.config = config
         self.tokenizer = self.model.get_tokenizer()
+        self.device = get_device_type()
         # eval_cfg
         self.eval_cfg = config.eval
         self.model_type = config.model.type
@@ -181,7 +184,7 @@ class BaseEval:
 
     @torch.no_grad()
     def forward_pre_hook(self, m, x):
-        m.cuda()
+        m.to(self.device)
 
     @torch.no_grad()
     def forward_hook(self, m, x, y):
@@ -199,7 +202,7 @@ class BaseEval:
         for layer in model.get_blocks():
             handles.append(layer.register_forward_hook(self.forward_hook))
         for layer in model.get_layers_except_blocks():
-            layer.cuda()
+            layer.to(self.device)
         return handles
 
     @torch.no_grad()
@@ -209,9 +212,9 @@ class BaseEval:
             handles = self.register_hooks(model_llmc)
         else:
             if model_llmc.mm_model:
-                model_llmc.mm_model.cuda()
+                model_llmc.mm_model.to(self.device)
             else:
-                model_llmc.model.cuda()
+                model_llmc.model.to(self.device)
 
         if model_llmc.mm_model:
             model_llmc.mm_model.eval()

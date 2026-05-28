@@ -5,6 +5,8 @@ import torch
 import torch.distributed as dist
 from loguru import logger
 
+from llmc.utils.utils import get_device_type
+
 from .module_utils import _LLMC_LINEAR_TYPES_, _TRANSFORMERS_LINEAR_TYPES_
 from .utils import is_fp8_supported_gpu
 
@@ -39,6 +41,7 @@ class AutoClipper:
         self.weight_clips = {}
         self.w_only = w_only
         self.logit = lambda x: torch.log(x / (1 - x))
+        self.device = get_device_type()
 
     @torch.no_grad()
     def run(self, block, block_idx, input_feat, n_sample_token):
@@ -52,7 +55,7 @@ class AutoClipper:
                                               self.fp8_block_size).to(torch.bfloat16)
                 else:
                     is_fp8_weight = False
-                m = m.cuda()
+                m = m.to(self.device)
                 if any([_ in n for _ in ['q_', 'k_', 'query', 'key', 'Wqkv']]):
                     if self.clip_version == 'v2':
                         m.register_buffer('buf_upbound_factor', None)

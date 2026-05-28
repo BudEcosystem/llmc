@@ -24,6 +24,7 @@ from llmc.utils import (check_config, collect_lightllm_kv_calib_json,
                         update_autoawq_quant_config,
                         update_lightx2v_quant_config, update_vllm_quant_config)
 from llmc.utils.registry_factory import ALGO_REGISTRY, MODEL_REGISTRY
+from llmc.utils.utils import get_device_type
 
 
 def main(config):
@@ -205,8 +206,10 @@ if __name__ == '__main__':
         config = yaml.safe_load(file)
     config = EasyDict(config)
 
-    init_process_group(backend='nccl')
-    torch.cuda.set_device(int(os.environ['LOCAL_RANK']))
+    device = get_device_type()
+    init_process_group(backend='nccl' if device != 'cpu' else 'gloo')
+    if device == 'cuda':
+        torch.cuda.set_device(int(os.environ['LOCAL_RANK']))
 
     if int(os.environ['RANK']) != 0:
         logger.remove()

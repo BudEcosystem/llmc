@@ -253,7 +253,7 @@ class Awq(BaseBlockwiseQuantization):
                     torch.cuda.empty_cache()
 
         # Synchronize across ranks
-        best_error_tensor = torch.tensor([best_error], device='cuda')
+        best_error_tensor = torch.tensor([best_error], device=self.device)
         dist.all_reduce(best_error_tensor, op=dist.ReduceOp.MIN)
         global_best_error = best_error_tensor.item()
 
@@ -261,7 +261,7 @@ class Awq(BaseBlockwiseQuantization):
         global_best_rank = torch.tensor([dist.get_rank()
                                         if abs(best_error - global_best_error) < 1e-5
                                         else -1],
-                                        device='cuda')
+                                        device=self.device)
         dist.all_reduce(global_best_rank, op=dist.ReduceOp.MAX)
         global_best_rank = global_best_rank.item()
 
@@ -269,7 +269,7 @@ class Awq(BaseBlockwiseQuantization):
         if dist.get_rank() == global_best_rank:
             dist.broadcast(best_scales, src=global_best_rank)
         else:
-            best_scales = torch.zeros_like(best_scales, device='cuda')
+            best_scales = torch.zeros_like(best_scales, device=self.device)
             dist.broadcast(best_scales, src=global_best_rank)
 
         del org_out_dict

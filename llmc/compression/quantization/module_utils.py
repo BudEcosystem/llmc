@@ -8,6 +8,8 @@ import torch.nn.functional as F
 from loguru import logger
 from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS
 
+from llmc.utils.utils import get_device_type
+
 from .utils import is_fp8_supported_gpu
 
 if is_fp8_supported_gpu():
@@ -958,7 +960,7 @@ class VllmRealQuantLinear(nn.Module):
             packed |= weight[:, i::pack_factor] << num_bits * i
 
         packed = np.ascontiguousarray(packed).view(np.int32)
-        int_weight = torch.from_numpy(packed).cuda()
+        int_weight = torch.from_numpy(packed).to(get_device_type())
         del weight, packed
         return int_weight, scales.to(torch.float16)
 
@@ -1130,7 +1132,7 @@ class AutoawqRealQuantLinear(nn.Module):
         intweight = torch.cat(intweight, dim=1)
         intweight = intweight.t().contiguous()
         intweight = intweight.to(dtype=torch.int32)
-        intweight = intweight.cuda()
+        intweight = intweight.to(get_device_type())
 
         qweight = torch.zeros(
             (intweight.shape[0], intweight.shape[1] // 32 * bit),
@@ -1146,7 +1148,7 @@ class AutoawqRealQuantLinear(nn.Module):
                 qweight_col = intweight[:, col * pack_num + order_map[i]]
                 qweight[:, col] |= qweight_col << (i * bit)
 
-        zeros = zeros.to(dtype=torch.int32, device='cuda')
+        zeros = zeros.to(dtype=torch.int32, device=get_device_type())
         qzeros = torch.zeros(
             (zeros.shape[0], zeros.shape[1] // 32 * bit),
             dtype=torch.int32,

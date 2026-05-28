@@ -401,7 +401,7 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
         if self.quant_kvcache:
             self.register_kv_cache(block)
 
-        block = block.cuda()
+        block = block.to(self.device)
         named_linears = self.model.get_block_linears(block)
         extra_modules = self.model.get_extra_modules(block)
 
@@ -422,7 +422,8 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
 
         self.run(block, input_feat, handles)
 
-        block = block.cpu()
+        if self.device == 'cuda':
+            block = block.cpu()
         del input_feat, block
         gc.collect()
         torch.cuda.empty_cache()
@@ -592,7 +593,7 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
         for i, (scales, zeros, qmin, qmax) in enumerate(
             zip(scales_list, zeros_list, qmin_list, qmax_list)
         ):
-            scales = scales.cuda()
+            scales = scales.to(self.device)
             dist.all_reduce(scales, op=dist.ReduceOp.SUM)
             scales = scales / world_size
 
@@ -602,9 +603,9 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
                 ):
                     continue
                 layer.register_buffer(f'buf_act_scales_{i}', scales)
-                layer.register_buffer(f'buf_act_zeros_{i}', zeros.cuda())
-                layer.register_buffer(f'buf_act_qmin_{i}', qmin.cuda())
-                layer.register_buffer(f'buf_act_qmax_{i}', qmax.cuda())
+                layer.register_buffer(f'buf_act_zeros_{i}', zeros.to(self.device))
+                layer.register_buffer(f'buf_act_qmin_{i}', qmin.to(self.device))
+                layer.register_buffer(f'buf_act_qmax_{i}', qmax.to(self.device))
 
     @torch.no_grad()
     def repeat_gqa_scales(self, scales):

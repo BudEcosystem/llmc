@@ -17,11 +17,13 @@ from llmc.compression.quantization.module_utils import (
     _LLMC_LINEAR_TYPES_, _LLMC_LN_TYPES_, _TRANSFORMERS_LINEAR_TYPES_,
     _TRANSFORMERS_LN_TYPES_, LlmcFp8Linear, VllmQuantLinearFp8,
     VllmQuantLinearInt8)
+from llmc.utils.utils import get_device_type
 
 
 class BaseModel(metaclass=ABCMeta):
     def __init__(self, config, device_map=None, use_cache=False):
         self.config = config
+        self.device = get_device_type()
         self.model_type = self.config.model.type
         self.model_path = self.config.model.path
         self.tokenizer_mode = self.config.model.get('tokenizer_mode', 'fast')
@@ -282,7 +284,7 @@ class BaseModel(metaclass=ABCMeta):
 
         Catcher = self.get_catcher(first_block_input)
 
-        if not self.use_cpu_to_save_cuda_mem_for_catcher:
+        if not self.use_cpu_to_save_cuda_mem_for_catcher and self.device == 'cuda':
             self.move_embed_to_device('cuda')
             if self.vision_model:
                 self.vision_model.cuda()
@@ -297,7 +299,7 @@ class BaseModel(metaclass=ABCMeta):
 
         for data in calib_data:
             data = {
-                k: (v.cuda() if torch.is_tensor(v) else v)
+                k: (v.to(self.device) if torch.is_tensor(v) else v)
                 for k, v in data.items()
             }
             try:
@@ -322,7 +324,7 @@ class BaseModel(metaclass=ABCMeta):
                         value=1
                     )
         self.padding_mask = padding_mask
-        if not self.use_cpu_to_save_cuda_mem_for_catcher:
+        if not self.use_cpu_to_save_cuda_mem_for_catcher and self.device == 'cuda':
             if self.vision_model:
                 self.vision_model.cpu()
             if self.vision_projector:
@@ -384,9 +386,11 @@ class BaseModel(metaclass=ABCMeta):
             if keep_device:
                 self.replace_module_block(module, self.blocks[block_idx], block_idx, params_dict)
             else:
-                self.blocks[block_idx].cuda()
+                if self.device == 'cuda':
+                    self.blocks[block_idx].cuda()
                 self.replace_module_block(module, self.blocks[block_idx], block_idx, params_dict)
-                self.blocks[block_idx].cpu()
+                if self.device == 'cuda':
+                    self.blocks[block_idx].cpu()
             gc.collect()
             torch.cuda.empty_cache()
 

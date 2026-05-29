@@ -3,9 +3,12 @@ torchvision
 timm
 pillow
 loguru
-transformers>=4.45.2
+transformers>=4.51.0,<5.0
 lmms-eval==0.3.0
-huggingface-hub
+# hub <1.0 keeps the legacy dataset loader compatible with datasets 2.16.1
+# (pinned by lmms-eval). hub 1.x's strict HF-URI parser rejects the canonical
+# namespace-less "wikitext" dataset used for PPL eval.
+huggingface-hub<1.0
 safetensors
 sentencepiece
 protobuf
